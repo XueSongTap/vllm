@@ -80,7 +80,17 @@ class LLMEngine:
         log_stats: Whether to log statistics.
         usage_context: Specified entry point, used for usage info collection
     """
-
+    # 初始化参数
+    # model_config：关于 LLM 模型的配置。
+    # cache_config：与 KV 缓存内存管理相关的配置。
+    # parallel_config：与分布式执行相关的配置。
+    # scheduler_config：与请求调度器相关的配置。
+    # device_config：与设备相关的配置。
+    # lora_config：与服务多-LoRA（Layer-wise Representation Adjustment）相关的配置（可选）。
+    # vision_language_config：与视觉语言模型相关的配置（可选）。
+    # speculative_config：与推测解码相关的配置（可选）。
+    # executor_class：用于管理分布式执行的模型执行类。
+    # log_stats：是否记录统计数据。
     def __init__(
         self,
         model_config: ModelConfig,
@@ -167,7 +177,6 @@ class LLMEngine:
             speculative_config=speculative_config,
             load_config=load_config,
         )
-
         self._initialize_kv_caches()
 
         # If usage stat is enabled, collect relevant info.
@@ -237,7 +246,7 @@ class LLMEngine:
                     self.get_tokenizer_for_seq,
                 ),
             ))
-
+    # 负责在工作器中初始化 KV 缓存，并确定 GPU 和 CPU 缓存的块数量。
     def _initialize_kv_caches(self) -> None:
         """Initialize the KV cache in the worker(s).
 
@@ -348,7 +357,7 @@ class LLMEngine:
                                                      prompt=prompt,
                                                      lora_request=lora_request)
         return prompt_token_ids
-
+    # 允许向引擎添加一个请求，这个请求将被调度器处理。这包括将请求转换为一组序列，并将其添加到调度器的队列中。
     def add_request(
         self,
         request_id: str,

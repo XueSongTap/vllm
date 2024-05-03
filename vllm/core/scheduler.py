@@ -24,7 +24,12 @@ ENABLE_ARTIFICIAL_PREEMPT = bool(
 ARTIFICIAL_PREEMPTION_PROB = 0.5
 ARTIFICIAL_PREEMPTION_MAX_CNT = 500
 
+# continuous batching and scheduling 的实现
 
+# PreemptionMode 枚举
+# 定义了预处理模式，包括：
+# SWAP：将序列的数据块交换到 CPU 内存，当需要时再交换回 GPU。
+# RECOMPUTE：丢弃序列的数据块，并在需要时重新计算。
 class PreemptionMode(enum.Enum):
     """Preemption modes.
 
@@ -37,7 +42,7 @@ class PreemptionMode(enum.Enum):
     SWAP = enum.auto()
     RECOMPUTE = enum.auto()
 
-
+# 描述了调度的可用槽位和令牌预算。这包括了如何处理和跟踪序列 ID 和批处理的令牌数。
 @dataclass
 class SchedulingBudget:
     """The available slots for scheduling.
@@ -98,7 +103,7 @@ class SchedulingBudget:
     def num_curr_seqs(self):
         return self._num_curr_seqs
 
-
+# 包含了被调度的序列组和下一次迭代要处理的令牌块大小。
 @dataclass
 class ScheduledSequenceGroup:
     # A sequence group that's scheduled.
@@ -155,7 +160,7 @@ class SchedulerOutputs:
             if g.seq_group.lora_request is not None
         }
 
-
+# 定义了调度决策的结果，包括已调度的序列组、要交换的数据块、忽略的序列组等信息。
 @dataclass
 class SchedulerRunningOutputs:
     """The requests that are scheduled from a running queue.
@@ -242,10 +247,20 @@ class SchedulerPrefillOutputs:
             ignored_seq_groups=[],
             num_lookahead_slots=0,
         )
-
+# 调度过程
+# 调度器维护三种状态的序列组队列：
+# waiting：等待被调度的序列组。
+# running：当前正在执行的序列组。
+# swapped：被交换出内存的序列组。
+# 调度器的核心方法 _schedule() 根据配置和系统状态决定如何调度这些序列组。它可以选择执行预填充（prefilling），处理正在运行的请求，或者处理已经被交换出去的请求。
 
 class Scheduler:
-
+    # 构造函数初始化调度器配置、缓存配置和 LoRA（一种优化策略）配置。根据配置，初始化不同的块空间管理器来处理内存块的分配和交换。
+    # Scheduler 的构造函数接收几个配置参数：
+    # scheduler_config：调度器的配置，定义了如何处理各种序列和任务。
+    # cache_config：缓存配置，涉及内存块的大小、GPU和CPU上的内存块数量等。
+    # lora_config：可选的 LoRA 配置，LoRA 是一种模型优化策略，可以调整模型层的表示。
+    # 构造函数中还根据这些配置初始化块空间管理器（BlockSpaceManager），这是管理内存块分配和交换的核心组件。
     def __init__(
         self,
         scheduler_config: SchedulerConfig,
@@ -358,6 +373,8 @@ class Scheduler:
     def get_num_unfinished_seq_groups(self) -> int:
         return len(self.waiting) + len(self.running) + len(self.swapped)
 
+    # _schedule_running、_schedule_swapped
+    # _schedule_prefills：这些函数分别处理运行中、交换出去和预填充阶段的序列组。它们负责决定哪些序列组被调度执行，哪些被预先或重新计算，哪些保留在内存中或交换出去。
     def _schedule_running(
         self,
         running_queue: deque,

@@ -15,7 +15,8 @@ SeqId = int
 TargetSeqId = int
 TokenId = int
 
-
+# 主要是实现 speculative decoding 的 scorer，用于计算每个 token 的概率
+# This is a speculative scorer that uses batch expansion to get probabilities of speculative tokens according to the scoring model.
 class BatchExpansionTop1Scorer(SpeculativeScorer):
     """Implements a speculative scorer that uses batch expansion to get
     probabilities of speculative tokens according to the scoring model.

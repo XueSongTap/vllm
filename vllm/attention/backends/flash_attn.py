@@ -15,7 +15,7 @@ from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionMetadataPerStage)
 from vllm.attention.ops.paged_attn import (PagedAttention,
                                            PagedAttentionMetadata)
-
+# 一种注意力机制，能根据给定场景切换使用闪电注意力和分页注意力。它利用高效的内存管理技术来处理大型模型或序列。
 
 class FlashAttentionBackend(AttentionBackend):
 
@@ -26,7 +26,7 @@ class FlashAttentionBackend(AttentionBackend):
     @staticmethod
     def make_metadata(*args, **kwargs) -> "FlashAttentionMetadata":
         return FlashAttentionMetadata(*args, **kwargs)
-
+    # get_kv_cache_shape()、swap_blocks()、copy_blocks()：这些方法将键值（KV）缓存形状管理和缓存块重排或复制操作委托给 PagedAttention 类。
     @staticmethod
     def get_kv_cache_shape(
         num_blocks: int,
@@ -105,11 +105,11 @@ class FlashAttentionMetadata(AttentionMetadataPerStage,
 class FlashAttentionImpl(AttentionImpl):
     """
     If the input tensors contain prompt tokens, the layout is as follows:
-    |<--------------- num_prefill_tokens ----------------->|	
+    |<--------------- num_prefill_tokens ----------------->|
     |<--prefill_0-->|<--prefill_1-->|...|<--prefill_N-1--->|
 
-    Otherwise, the layout is as follows:	
-    |<----------------- num_decode_tokens ------------------>|	
+    Otherwise, the layout is as follows:
+    |<----------------- num_decode_tokens ------------------>|
     |<--decode_0-->|..........|<--decode_M-1-->|<--padding-->|
 
     Generation tokens can contain padding when cuda-graph is used.
@@ -127,7 +127,8 @@ class FlashAttentionImpl(AttentionImpl):
     Currently, cuda graph is disabled for chunked prefill, meaning there's no
     padding between prefill and decode tokens.
     """
-
+    # 配置头数、头大小、缩放因子，可选参数如 num_kv_heads、alibi_slopes 和 sliding_window。
+    # 检查 PagedAttention 支持的头大小。
     def __init__(
         self,
         num_heads: int,
@@ -155,7 +156,12 @@ class FlashAttentionImpl(AttentionImpl):
             raise ValueError(
                 f"Head size {head_size} is not supported by PagedAttention. "
                 f"Supported head sizes are: {suppored_head_sizes}.")
-
+    # 重写 forward() 方法，实现 FlashAttention 和 PagedAttention 的前向传播。
+    # 处理注意力机制的前向传递，根据输入是包含提示还是生成令牌来适应。
+    # 如果提供了 KV 缓存，将其拆分并可能使用 PagedAttention 的方法更新。
+    # 在“预填充”（最初的注意力覆盖提示或固定序列）和“解码”（新生成令牌的注意力）之间区分处理。
+    # 根据提供的元数据，可能使用 CUDA 优化路径或常规张量计算。
+    # 使用外部库中的 flash_attn_varlen_func（可能是 CUDA 加速函数）进行高效的注意力计算。
     def forward(
         self,
         query: torch.Tensor,

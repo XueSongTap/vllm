@@ -10,7 +10,15 @@ from vllm.utils import Device
 
 SeqId = int
 
-
+# BlockSpaceManagerV2 类是一个用于管理 KV 缓存分配的块空间管理器。
+# 它主要负责分配内存、交换内存、为自回归生成的令牌分配内存，以及处理其他高级特性，
+# 如前缀缓存、写时复制和滑动窗口内存分配。
+# 内存块的管理：
+# 管理器控制 GPU 和 CPU 上的内存块的分配和释放。
+# 使用 CpuGpuBlockAllocator 对象来实现具体的分配逻辑。
+# 前缀缓存和写时复制：
+# 如果启用缓存 (enable_caching)，将使用前缀缓存策略；否则使用简单的分配策略。
+# 写时复制是一种内存管理技术，用于优化内存使用和更新，允许在必要时才复制数据。
 class BlockSpaceManagerV2(BlockSpaceManager):
     """BlockSpaceManager which manages the allocation of KV cache.
 
@@ -84,7 +92,9 @@ class BlockSpaceManagerV2(BlockSpaceManager):
         )
 
         self.block_tables: Dict[SeqId, BlockTable] = {}
-
+    # 分配检查 (can_allocate)：
+    # 根据序列组的需要和当前的内存使用情况来判断是否可以分配内存块。
+    # 使用水印阈值来避免频繁的缓存驱逐。
     def can_allocate(self, seq_group: SequenceGroup) -> AllocStatus:
         # FIXME(woosuk): Here we assume that all sequences in the group share
         # the same prompt. This may not be true for preempted sequences.
@@ -111,7 +121,9 @@ class BlockSpaceManagerV2(BlockSpaceManager):
             return AllocStatus.OK
         else:
             return AllocStatus.LATER
-
+    # 实际分配 (allocate)：
+    # 为等待中的序列分配必要的内存块。
+    # 使用 BlockTable 来跟踪每个序列使用的内存块。
     def allocate(self, seq_group: SequenceGroup) -> None:
         waiting_seqs = seq_group.get_seqs(status=SequenceStatus.WAITING)
         assert not (set(seq.seq_id for seq in waiting_seqs)
@@ -161,7 +173,8 @@ class BlockSpaceManagerV2(BlockSpaceManager):
         num_free_gpu_blocks = self.block_allocator.get_num_free_blocks(
             Device.GPU)
         return num_touched_blocks <= num_free_gpu_blocks
-
+    # 添加预留槽位 (append_slots)：
+    # 为序列添加预留槽位，这些槽位用于将来可能的内存需求，如预测解码中预测未来令牌时使用。
     def append_slots(
         self,
         seq: Sequence,
@@ -178,7 +191,8 @@ class BlockSpaceManagerV2(BlockSpaceManager):
         # Return any new copy-on-writes.
         new_cows = self.block_allocator.clear_copy_on_writes()
         return new_cows
-
+    # 释放内存 (free)：
+    # 释放指定序列的内存块。
     def free(self, seq: Sequence) -> None:
         if seq.seq_id not in self.block_tables:
             # Already freed or haven't been scheduled yet.
@@ -191,7 +205,8 @@ class BlockSpaceManagerV2(BlockSpaceManager):
         block_ids = self.block_tables[seq.seq_id].physical_block_ids
         assert all(b is not None for b in block_ids)
         return block_ids  # type: ignore
-
+    # 获取和更新块访问时间 (access_all_blocks_in_seq)：
+    # 更新所有被访问块的最后访问时间，这对于支持缓存的内存回收政策很重要。
     def access_all_blocks_in_seq(self, seq: Sequence, now: float):
         # Update the last accessed time of all the blocks accessed
         # in this step.
@@ -232,7 +247,8 @@ class BlockSpaceManagerV2(BlockSpaceManager):
         # NOTE(sang): This assumes seq_block_ids doesn't contain any None.
         return self.block_allocator.get_common_computed_block_ids(
             seq_block_ids)  # type: ignore
-
+    # 检查和管理写时复制 (fork)：
+    # 创建序列的内存块的复制，用于实现写时复制逻辑。
     def fork(self, parent_seq: Sequence, child_seq: Sequence) -> None:
         src_block_table = self.block_tables[parent_seq.seq_id]
         self.block_tables[child_seq.seq_id] = src_block_table.fork()

@@ -46,7 +46,10 @@ def _raise_exception_on_finish(
         raise AsyncEngineDeadError(
             msg + " See stack trace above for the actual cause.") from e
 
-
+# AsyncStream 类用于异步地管理请求输出。它具备以下功能：
+# put 方法：将生成的输出或异常添加到队列中。
+# finish 方法：标记流的完成，并添加一个 StopAsyncIteration 信号到队列中。
+# 异步迭代器接口：通过实现 __aiter__ 和 __anext__ 方法，允许异步遍历生成的输出。
 class AsyncStream:
     """A stream of RequestOutputs for a request that can be
     iterated over asynchronously."""
@@ -483,7 +486,11 @@ class AsyncLLMEngine:
             await self.engine.abort_request.remote(request_ids)  # type: ignore
         else:
             self.engine.abort_request(request_ids)
-
+    # 使用一个异步的背景任务循环（通过 run_engine_loop 方法实现）来持续处理请求。这个循环负责：
+    #
+    # 等待新请求。
+    # 处理新添加的请求和完成的请求。
+    # 调用 engine_step 方法来执行模型，并处理生成的结果。
     async def run_engine_loop(self):
         has_requests_in_progress = False
         while True:
